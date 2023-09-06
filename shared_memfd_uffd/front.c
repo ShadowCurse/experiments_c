@@ -118,7 +118,7 @@ int main() {
     return 1;
   }
 
-  char* memfd_map = (char*)mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, memfd, 0);
+  char* memfd_map = (char*)mmap(0, SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, memfd, 0);
   if (memfd_map == MAP_FAILED) {
     printf("memfd map failed\n");
     return 1;
@@ -203,9 +203,6 @@ int main() {
   printf("sending FD: %d\n", memfd);
   sendmsg(sockfd, &msg, 0);
 
-  // sleep to give time for backedn to read mem
-  sleep(2);
-  // read data
   printf("Reading address %p\n", memfd_map);
   char c = *memfd_map;
   printf("Byte: %c\n", c);

@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <sys/un.h>
 #include <sys/mman.h>
 #include <sys/types.h>
@@ -9,7 +8,7 @@
 #include <sys/syscall.h>
 #include <linux/memfd.h>
 
-static int SIZE = 300;
+static int SIZE = 8192;
 static char* SERVER_SOCKET_PATH = "test_socket";
 
 int main() {
@@ -67,7 +66,6 @@ int main() {
   }
   printf("memfd_map: %p\n", memfd_map);
 
-  sleep(1);
   printf("Reading first 10 bytes\n");
   printf("Message: %.*s\n", 10, memfd_map);
 
