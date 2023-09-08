@@ -8,6 +8,7 @@
 #include <sys/syscall.h>
 #include <linux/memfd.h>
 
+static int PAGE_SIZE = 4096;
 static int SIZE = 8192;
 static char* SERVER_SOCKET_PATH = "test_socket";
 
@@ -18,7 +19,6 @@ int main() {
     printf("sockfd failed");
     return 1;
   }
-
   printf("socked fd: %d\n", sockfd);
 
   struct sockaddr_un server_addr;
@@ -33,6 +33,7 @@ int main() {
     return 1;
   }
 
+  // get memfd from frontend
   char iov_dummy;
   struct iovec iov = { 
     .iov_base = &iov_dummy, 
@@ -56,7 +57,6 @@ int main() {
 
   struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
   int memfd = *(int*)CMSG_DATA(cmsg); // receive file descriptor
-
   printf("memfd: %d\n", memfd);
 
   char* memfd_map = (char*)mmap(0, SIZE, PROT_READ, MAP_SHARED, memfd, 0);
@@ -66,8 +66,13 @@ int main() {
   }
   printf("memfd_map: %p\n", memfd_map);
 
+  // sleep to give time for frontend to make an uffd page fault
+  sleep(1);
   printf("Reading first 10 bytes\n");
   printf("Message: %.*s\n", 10, memfd_map);
+
+  printf("Reading first 10 bytes of second page\n");
+  printf("Message: %.*s\n", 10, memfd_map + PAGE_SIZE);
 
   munmap(memfd_map, SIZE);
   close(sockfd);
