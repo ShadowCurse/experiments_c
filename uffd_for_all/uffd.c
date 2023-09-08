@@ -15,10 +15,11 @@
 #include <linux/memfd.h>
 #include <linux/userfaultfd.h>
 
-static int PAGE_SIZE = 4096;
-static int SIZE = 8192;
-static char* SERVER_SOCKET_PATH = "test_socket";
-static char* UFFD_SOCKET_PATH = "test_socket_uffd";
+const int PAGE_SIZE = 4096;
+const int NUM_PAGES = 20;
+const int SIZE = PAGE_SIZE * NUM_PAGES;
+const char* SERVER_SOCKET_PATH = "test_socket";
+const char* UFFD_SOCKET_PATH = "test_socket_uffd";
 
 int get_fd_and_addr(int sockfd, uint64_t* addr) {
   struct iovec iov = { 
@@ -51,8 +52,8 @@ int main() {
   printf("Creating socket to uffd\n");
   int sockfd = socket(AF_UNIX, SOCK_DGRAM, 0);
   if (sockfd < 0) {
-    printf("sockfd failed\n");
-    return 1;
+    perror("sockfd failed\n");
+    exit(EXIT_FAILURE);
   }
 
   struct sockaddr_un server_addr;
@@ -63,8 +64,8 @@ int main() {
   unlink(UFFD_SOCKET_PATH);
 
   if (bind(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-    printf("bind failed");
-    return 1;
+    perror("bind failed");
+    exit(EXIT_FAILURE);
   }
   printf("socket bind done\n");
 
@@ -93,11 +94,6 @@ int main() {
   // Number of faults so far handled
   int fault_cnt = 0; 
   for (;;) {
-      // We only trigger 2 page faults
-      if (fault_cnt == 2) {
-        break;
-      }
-
       struct pollfd pollfds[] = {
         {
           .fd = front_uffd,
@@ -113,68 +109,68 @@ int main() {
         perror("poll failed");
         exit(EXIT_FAILURE);
       }
+      printf("Got %d ready fds\n", nready);
 
-      struct pollfd ready;
       for (int i = 0; i < 2; i++) {
         if (pollfds[i].revents & POLLIN) {
-          ready = pollfds[i];
+          struct pollfd ready = pollfds[i];
+          int ready_fd = ready.fd;
+          printf("Polled fd: %d\n", ready_fd);
+
+          // Read an event from the userfaultfd.
+          struct uffd_msg msg;
+          int nread = read(ready_fd, &msg, sizeof(msg));
+          if (nread == 0) {
+              perror("EOF on userfaultfd");
+              exit(EXIT_FAILURE);
+          }
+
+          if (nread == -1){
+            perror("uffd read failed");
+            exit(EXIT_FAILURE);
+          }
+
+          // We expect only one kind of event; verify that assumption.
+          if (msg.event != UFFD_EVENT_PAGEFAULT) {
+              perror("Unexpected event on userfaultfd");
+              exit(EXIT_FAILURE);
+          }
+
+          //Copy the page pointed to by 'page' into the faulting
+          //region. Vary the contents that are copied in, so that it
+          //is more obvious that each fault is handled separately. 
+          memset(page, 'A' + fault_cnt % 20, PAGE_SIZE);
+          fault_cnt++;
+
+          struct uffdio_copy uffdio_copy;
+          uffdio_copy.src = (unsigned long) page;
+
+          //We need to handle page faults in units of pages(!).
+          //So, round faulting address down to page boundary.
+          uint64_t page_addr = (uint64_t)msg.arg.pagefault.address & ~(PAGE_SIZE - 1);
+
+          printf("serving page %p\n", page_addr);
+
+          uffdio_copy.dst = page_addr;
+          uffdio_copy.len = PAGE_SIZE;
+          uffdio_copy.mode = 0;
+          uffdio_copy.copy = 0;
+          if (ioctl(ready_fd, UFFDIO_COPY, &uffdio_copy) == -1) {
+              perror("UFFDIO_COPY");
+              printf("Continuing");
+              struct uffdio_continue uffdio_continue;
+              uffdio_continue.range.start = (unsigned long) msg.arg.pagefault.address & ~(PAGE_SIZE - 1);
+              uffdio_continue.range.len = PAGE_SIZE;
+              uffdio_continue.mode = 0;
+              uffdio_continue.mapped = 0;
+
+              if (ioctl(ready_fd, UFFDIO_CONTINUE, &uffdio_continue) == -1) {
+                  perror("UFFDIO_CONTINUE");
+                  exit(EXIT_FAILURE);
+              }
+          }
         }
       }
-      int ready_fd = ready.fd;
-      printf("Polled fd: %d\n", ready_fd);
-
-      printf("    poll() returns: nready = %d; "
-             "POLLIN = %d; POLLERR = %d\n", nready,
-             (ready.revents & POLLIN) != 0,
-             (ready.revents & POLLERR) != 0);
-
-      // Read an event from the userfaultfd.
-      struct uffd_msg msg;
-      int nread = read(ready_fd, &msg, sizeof(msg));
-      if (nread == 0) {
-          perror("EOF on userfaultfd");
-          exit(EXIT_FAILURE);
-      }
-
-      if (nread == -1){
-        perror("uffd read failed");
-        exit(EXIT_FAILURE);
-      }
-
-      // We expect only one kind of event; verify that assumption.
-      if (msg.event != UFFD_EVENT_PAGEFAULT) {
-          perror("Unexpected event on userfaultfd");
-          exit(EXIT_FAILURE);
-      }
-
-      // Display info about the page-fault event.
-      printf("    UFFD_EVENT_PAGEFAULT event: ");
-      printf("flags = %"PRIx64"; ", msg.arg.pagefault.flags);
-      printf("address = %"PRIx64"\n", msg.arg.pagefault.address);
-
-      //Copy the page pointed to by 'page' into the faulting
-      //region. Vary the contents that are copied in, so that it
-      //is more obvious that each fault is handled separately. 
-      memset(page, 'A' + fault_cnt % 20, PAGE_SIZE);
-      fault_cnt++;
-
-      struct uffdio_copy uffdio_copy;
-      uffdio_copy.src = (unsigned long) page;
-
-      //We need to handle page faults in units of pages(!).
-      //So, round faulting address down to page boundary.
-
-      uffdio_copy.dst = (unsigned long) msg.arg.pagefault.address & ~(PAGE_SIZE - 1);
-      uffdio_copy.len = PAGE_SIZE;
-      uffdio_copy.mode = 0;
-      uffdio_copy.copy = 0;
-      if (ioctl(ready_fd, UFFDIO_COPY, &uffdio_copy) == -1) {
-          perror("UFFDIO_COPY");
-          exit(EXIT_FAILURE);
-      }
-
-      printf("        (uffdio_copy.copy returned %"PRId64")\n",
-             uffdio_copy.copy);
   }
 
   return 0;
