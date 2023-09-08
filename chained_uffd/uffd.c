@@ -15,10 +15,11 @@
 #include <linux/memfd.h>
 #include <linux/userfaultfd.h>
 
-static int PAGE_SIZE = 4096;
-static int SIZE = 8192;
-static char* SERVER_SOCKET_PATH = "test_socket";
-static char* UFFD_SOCKET_PATH = "test_socket_uffd";
+const int PAGE_SIZE = 4096;
+const int NUM_PAGES = 20;
+const int SIZE = PAGE_SIZE * NUM_PAGES;
+const char* SERVER_SOCKET_PATH = "test_socket";
+const char* UFFD_SOCKET_PATH = "test_socket_uffd";
 
 int main() {
   // CREATE SOCKET
@@ -79,8 +80,8 @@ int main() {
   // Number of faults so far handled
   int fault_cnt = 0; 
   for (;;) {
-      // We only trigger 2 page faults
-      if (fault_cnt == 2) {
+      // We only trigger NUM_PAGES page faults
+      if (fault_cnt == NUM_PAGES) {
         break;
       }
 

@@ -15,10 +15,11 @@
 #include <linux/memfd.h>
 #include <linux/userfaultfd.h>
 
-static int PAGE_SIZE = 4096;
-static int SIZE = 8192;
-static char* SERVER_SOCKET_PATH = "test_socket";
-static char* UFFD_SOCKET_PATH = "test_socket_uffd";
+const int PAGE_SIZE = 4096;
+const int NUM_PAGES = 20;
+const int SIZE = PAGE_SIZE * NUM_PAGES;
+const char* SERVER_SOCKET_PATH = "test_socket";
+const char* UFFD_SOCKET_PATH = "test_socket_uffd";
 
 struct thread_data {
   int uffd;
@@ -96,7 +97,7 @@ void* proxy_uffd_handler(void *arg) {
   }
 }
 
-int connect_socket(int sockfd, char* path) {
+int connect_socket(int sockfd, const char* path) {
   struct sockaddr_un server_addr;
   memset(&server_addr, 0, sizeof(server_addr));
   server_addr.sun_family = AF_UNIX;
@@ -110,7 +111,7 @@ int connect_socket(int sockfd, char* path) {
   return sockfd;
 }
 
-void bind_socket(int sockfd, char* path) {
+void bind_socket(int sockfd, const char* path) {
   struct sockaddr_un server_addr;
   memset(&server_addr, 0, sizeof(server_addr));
   server_addr.sun_family = AF_UNIX;

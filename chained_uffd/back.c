@@ -16,9 +16,11 @@
 #include <linux/memfd.h>
 #include <linux/userfaultfd.h>
 
-static int PAGE_SIZE = 4096;
-static int SIZE = 8192;
-static char* SERVER_SOCKET_PATH = "test_socket";
+const int PAGE_SIZE = 4096;
+const int NUM_PAGES = 20;
+const int SIZE = PAGE_SIZE * NUM_PAGES;
+const char* SERVER_SOCKET_PATH = "test_socket";
+const char* UFFD_SOCKET_PATH = "test_socket_uffd";
 
 #define LOG_TIME(fn) \
     struct timeval tv; \
@@ -165,12 +167,11 @@ int main() {
   sleep(1);
 
   // DO PAGE FAULT
-  for (int p = 0; p < 2; p++) {
-    for (int i = 0; i < 10; i++) {
+  for (int p = 0; p < NUM_PAGES; p++) {
+    for (int i = 0; i < 2; i++) {
       char* ptr = memfd_map + PAGE_SIZE * p;
-      printf("Reading page: %d, address %p, offset: %d\n", p, ptr, ptr - memfd_map);
       LOG_TIME(char c = *(ptr))
-      printf("Byte: %c\n", c);
+      printf("Read page: %d, address %p, offset: %d, byte: %c\n", p, ptr, ptr - memfd_map, c);
     }
   }
 
